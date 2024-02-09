@@ -74,6 +74,8 @@ regcall GetModuleHandleW64Adapter(
 		"MOV RAX, QWORD PTR [RDI+0x30] \n"
 		"MOV RDX, RAX \n"
 		"SHR RDX, 32 \n"
+		"MOV ECX, 0x2B \n" // Ryzen bug workaround (see https://github.com/DynamoRIO/dynamorio/pull/4485)
+		"MOV SS, ECX \n"
 		"RETF"
 		);
 }
@@ -162,6 +164,8 @@ regcall GetProcAddress64Adapter(
 		"MOVQ XMM0, RAX \n"
 		"MOV RDX, RAX \n"
 		"SHR RDX, 32 \n"
+		"MOV ECX, 0x2B \n" // Ryzen bug workaround (see https://github.com/DynamoRIO/dynamorio/pull/4485)
+		"MOV SS, ECX \n"
 		"RETF"
 		);
 }
@@ -265,6 +269,8 @@ regcall VirtualAlloc64Adapter(
 		"SHR RDX, 32 \n"
 		"MOVQ XMM0, RDI \n"
 		"MOV RAX, RDI \n"
+		"MOV ESP, 0x2B \n" // Ryzen bug workaround (see https://github.com/DynamoRIO/dynamorio/pull/4485)
+		"MOV SS, ESP \n"
 		"MOV ESP, ESI \n"
 		"RETF"
 		);
@@ -291,6 +297,8 @@ regcall memcpy64Adapter(
 		"OR RDI, RBX \n"
 		"MOVQ XMM0, RDI \n"
 		"REP movsb \n"
+		"MOV ECX, 0x2B \n" // Ryzen bug workaround (see https://github.com/DynamoRIO/dynamorio/pull/4485)
+		"MOV SS, ECX \n"
 		"RETF"
 		);
 }

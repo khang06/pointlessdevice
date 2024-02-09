@@ -10,11 +10,9 @@
 #define GAME 10
 
 #if GAME == 6
-#define INPUT_ADDR 0x69D904
 #define UPDATE_CALL_ADDR 0x4204FF
 #define UPDATE_CONV __thiscall
 #elif GAME == 10
-#define INPUT_ADDR 0x474E30
 #define UPDATE_CALL_ADDR 0x438D31
 #define UPDATE_CONV __stdcall
 #else
@@ -96,12 +94,12 @@ void reprot_pages() {
 }
 
 // Game-specific...
-uint16_t g_last_input = 0;
+BYTE g_last_input[256] = {};
 int (UPDATE_CONV* g_orig_update)(void*) = nullptr;
 int UPDATE_CONV hooked_update(void* self) {
-    auto pressed = *(uint16_t*)INPUT_ADDR & ~g_last_input;
-    g_last_input = *(uint16_t*)INPUT_ADDR;
-    if (pressed & 0x200) { // Q
+    BYTE cur_input[256];
+    GetKeyboardState(cur_input);
+    if (cur_input['Q'] & ~g_last_input['Q']) {
         printf("Initiating save\n");
         std::lock_guard<std::mutex> guard(g_mutex);
 
@@ -118,7 +116,7 @@ int UPDATE_CONV hooked_update(void* self) {
 
         // Mark all tracked pages as read-only
         reprot_pages();
-    } else if (pressed & 0x400) { // S
+    } else if (cur_input['S'] & ~g_last_input['S']) {
         printf("Initiating load\n");
         std::lock_guard<std::mutex> guard(g_mutex);
 
@@ -136,6 +134,8 @@ int UPDATE_CONV hooked_update(void* self) {
         g_pool_cur = 0;
         g_dirty_pages.clear();
     }
+
+    memcpy(g_last_input, cur_input, 256);
     return g_orig_update(self);
 }
 
