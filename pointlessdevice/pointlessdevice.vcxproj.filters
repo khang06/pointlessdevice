@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\zero">
+      <UniqueIdentifier>{5d1e687a-5b04-4ca2-81b5-c865e2f8ed2c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -21,9 +24,24 @@
     <ClCompile Include="patch_util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="low_mem_alloc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="patch_util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="zero\force_macros.h">
+      <Filter>Header Files\zero</Filter>
+    </ClInclude>
+    <ClInclude Include="zero\util.h">
+      <Filter>Header Files\zero</Filter>
+    </ClInclude>
+    <ClInclude Include="zero\custom_intrin.h">
+      <Filter>Header Files\zero</Filter>
+    </ClInclude>
+    <ClInclude Include="low_mem_alloc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

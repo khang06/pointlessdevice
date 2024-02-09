@@ -1,8 +1,10 @@
+#define NOMINMAX
 #include <Windows.h>
 #include <vector>
 #include <bitset>
 #include <mutex>
 #include <mimalloc.h>
+#include "low_mem_alloc.h"
 #include "patch_util.h"
 
 #define GAME 10
@@ -19,13 +21,17 @@
 #error invalid game
 #endif
 
+#define PAGE_POOL_SIZE (1uLL << 36) // 64GiB, should be plenty of space
 #define ROUND_TO_PAGES(Size)  (((ULONG_PTR)(Size) + 0xFFF) & ~0xFFF)
 
 std::mutex g_mutex;
+uint64_t g_pool = 0;
+uint64_t g_pool_cur = 0;
+uint64_t g_pool_cap = 0;
 bool g_dirty_tracking = false;
 std::bitset<0x100000> g_tracked_pages;
 std::bitset<0x100000> g_queued_to_track;
-std::vector<std::pair<uintptr_t, void*>> g_dirty_pages;
+std::vector<std::pair<uintptr_t, uint64_t>> g_dirty_pages;
 
 // Assuming start and len are page-aligned...
 void track_region(void* start, size_t len) {
@@ -107,8 +113,7 @@ int UPDATE_CONV hooked_update(void* self) {
         g_queued_to_track.reset();
 
         // Clear any dirty pages from the previous savestate if they exist
-        for (auto& entry : g_dirty_pages)
-            free(entry.second);
+        g_pool_cur = 0;
         g_dirty_pages.clear();
 
         // Mark all tracked pages as read-only
@@ -124,11 +129,11 @@ int UPDATE_CONV hooked_update(void* self) {
         printf("Restoring pages...");
         DWORD old_prot;
         for (auto& entry : g_dirty_pages) {
-            memcpy((void*)entry.first, entry.second, 0x1000);
-            free(entry.second);
+            memcpy64((PTR64<>)entry.first, (PTR64<>)entry.second, 0x1000);
             VirtualProtect((void*)entry.first, 0x1000, PAGE_READONLY, &old_prot);
         }
         printf("copied %u pages\n", g_dirty_pages.size());
+        g_pool_cur = 0;
         g_dirty_pages.clear();
     }
     return g_orig_update(self);
@@ -136,15 +141,21 @@ int UPDATE_CONV hooked_update(void* self) {
 
 LONG WINAPI exception_handler(struct _EXCEPTION_POINTERS* ExceptionInfo) {
     auto target = ExceptionInfo->ExceptionRecord->ExceptionInformation[1] & ~0xFFF;
-    if (!g_dirty_tracking || ExceptionInfo->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || !g_tracked_pages.test(target >> 12))
+    if (!g_dirty_tracking || ExceptionInfo->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || !g_tracked_pages.test(target >> 12)) {
+        printf("skipping exception handling for 0x%X lol!!! (eip = 0x%X)\n", target, ExceptionInfo->ContextRecord->Eip);
         return EXCEPTION_CONTINUE_SEARCH;
+    }
 
     std::lock_guard<std::mutex> guard(g_mutex);
     DWORD old_prot;
     //printf("Reprotecting page at 0x%X\n", target);
     VirtualProtect((LPVOID)target, 0x1000, PAGE_READWRITE, &old_prot);
-    auto orig = malloc(0x1000);
-    memcpy(orig, (void*)target, 0x1000);
+    auto orig = g_pool + g_pool_cur++ * 0x1000;
+    if (g_pool_cur == g_pool_cap + 1) {
+        auto alloc_target = (PTR64<>)(g_pool + g_pool_cap++ * 0x1000);
+        VirtualAlloc64(alloc_target, 0x1000, MEM_COMMIT, PAGE_READWRITE);
+    }
+    memcpy64((PTR64<>)orig, (void*)target, 0x1000);
     g_dirty_pages.push_back(std::make_pair(target, orig));
     return EXCEPTION_CONTINUE_EXECUTION;
 }
@@ -163,6 +174,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         iat_hook(L"dsound.dll", "kernel32.dll", "HeapAlloc", (void*)hooked_HeapAlloc);
         iat_hook(L"dsound.dll", "kernel32.dll", "HeapFree", (void*)hooked_HeapFree);
         iat_hook(L"dsound.dll", "kernel32.dll", "ReadFile", (void*)hooked_ReadFile);
+
+        // Reserve massive chunk of 64-bit memory
+        if (!init_unwow64_ntdll()) {
+            printf("init_unwow64_ntdll() failed\n");
+            DebugBreak();
+        }
+        for (uint64_t attempt = 0; g_pool == 0; attempt += PAGE_POOL_SIZE)
+            g_pool = (uint64_t)VirtualAlloc64((void* __ptr64)attempt, PAGE_POOL_SIZE, MEM_RESERVE, PAGE_READWRITE);
+        printf("Page pool at 0x%llX\n", g_pool);
 
         // Configure mimalloc
         mi_option_set(mi_option_purge_delay, -1);
