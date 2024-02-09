@@ -7,7 +7,7 @@
 #include "low_mem_alloc.h"
 #include "patch_util.h"
 
-#define GAME 10
+#define GAME 18
 
 #if GAME == 6
 #define UPDATE_CALL_ADDR 0x4204FF
@@ -15,6 +15,9 @@
 #elif GAME == 10
 #define UPDATE_CALL_ADDR 0x438D31
 #define UPDATE_CONV __stdcall
+#elif GAME == 18
+#define UPDATE_CALL_ADDR 0x471C5A
+#define UPDATE_CONV __thiscall
 #else
 #error invalid game
 #endif
